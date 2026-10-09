@@ -1,0 +1,50 @@
+{
+  "engine": "Blender 4.2.3 Cycles CPU",
+  "samples": 32,
+  "reference_bounds_blender_axes": [
+    [
+      -0.6071968674659729,
+      -0.9381009936332703,
+      -0.9893107414245605
+    ],
+    [
+      0.5935669541358948,
+      0.948935866355896,
+      0.991247296333313
+    ]
+  ],
+  "shared_camera_center": [
+    -0.0068149566650390625,
+    0.005417436361312866,
+    0.0009682774543762207
+  ],
+  "orthographic_scale": 2.5153086185455322,
+  "views": [
+    [
+      "front",
+      [
+        0,
+        -1,
+        0.16
+      ]
+    ],
+    [
+      "three_quarter",
+      [
+        1,
+        -1,
+        0.32
+      ]
+    ],
+    [
+      "rear",
+      [
+        0,
+        1,
+        0.16
+      ]
+    ]
+  ],
+  "mesh_transform": "Only GLTF importer coordinate-system conversion; no per-mesh scaling/alignment",
+  "material": "Shared neutral clay for comparison; original GLB materials for textured image"
+}
