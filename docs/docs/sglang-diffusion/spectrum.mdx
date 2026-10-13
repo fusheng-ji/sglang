@@ -36,6 +36,28 @@ sglang generate \
 
 ## Advanced controls
 
+### FLUX.1 with true CFG
+
+When FLUX.1 evaluates separate positive and negative branches, it limits
+Spectrum to at most one prediction on the final denoising step. Earlier steps
+run the real transformer. The prediction uses first-order local Taylor
+extrapolation (`w=0`), rather than the long-horizon Chebyshev profile. A larger
+explicit warmup, including an all-real schedule, remains in effect. The log
+reports this conservative fallback.
+
+FLUX.1 also limits CFG gating to at most the final step. For example, requesting
+`cfg_gate_step=0.3` with 20 steps uses real negative-branch predictions for the
+first 19 steps. Residual refreshes use real positive and negative predictions
+and update both Spectrum histories. CFG-parallel requests still disable gating.
+
+These safeguards reduce approximation substantially; they do not establish an
+end-to-end speedup or a general image-quality guarantee. Compare lossless outputs
+against your uncached baseline and measure latency with diagnostics disabled.
+FLUX.1 without true CFG and the other supported models retain their existing
+Spectrum schedules.
+
+### Parameter reference
+
 Use `--enable-spectrum` explicitly. Providing any Spectrum override also
 enables it, but that implicit behavior is intended for scripts rather than new
 commands.

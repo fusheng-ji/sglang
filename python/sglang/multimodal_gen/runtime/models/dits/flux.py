@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+from dataclasses import replace
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -1331,6 +1333,33 @@ class FluxTransformer2DModel(CachableDiT, LayerwiseOffloadableModuleMixin):
             "transformer_blocks",
             "single_transformer_blocks",
         ]
+
+    def _get_spectrum_context(self):
+        ctx = super()._get_spectrum_context()
+        if ctx is None or not ctx.do_cfg:
+            return ctx
+        # Aggressive long-horizon feature forecasts diverge under FLUX.1 true
+        # CFG. Keep at most one final-step, first-order local extrapolation.
+        # Copy request parameters: callers may reuse them for another model or
+        # request. A larger explicit warmup (including all-real) stays intact.
+        params = ctx.spectrum_params
+        bounded = replace(
+            params,
+            warmup_steps=max(params.warmup_steps, ctx.num_inference_steps - 1, 2),
+            w=0.0,
+            taylor_order=1,
+            history_size=max(2, params.m + 1),
+        )
+        if ctx.current_step == 0 and not ctx.is_cfg_negative:
+            logging.getLogger(__name__).warning(
+                "FLUX.1 true CFG uses a conservative Spectrum fallback: real "
+                "forwards until step %d/%d, then at most one local Taylor "
+                "prediction. This is a quality safeguard, not the aggressive "
+                "Spectrum speedup profile.",
+                bounded.warmup_steps,
+                ctx.num_inference_steps,
+            )
+        return replace(ctx, spectrum_params=bounded)
 
     def forward(
         self,
