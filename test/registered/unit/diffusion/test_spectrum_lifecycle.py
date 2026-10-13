@@ -82,7 +82,7 @@ class TestSpectrumLifecycle(CustomTestCase):
                 # Each rank runs one forward per step, so both wrap after the run.
                 self.assertEqual(negative._get_spectrum_branch_state(), (0, 0, 4.0))
 
-    def test_flux_true_cfg_uses_only_one_late_local_prediction(self):
+    def test_flux_true_cfg_falls_back_to_real_forwards_through_final_step(self):
         from sglang.multimodal_gen.runtime.models.dits.flux import (
             FluxTransformer2DModel,
         )
@@ -95,11 +95,15 @@ class TestSpectrumLifecycle(CustomTestCase):
         for step in range(8):
             for negative in (False, True):
                 with self.subTest(step=step, negative=negative):
-                    features = torch.full((2, 3), float(step + 1 + 10 * negative))
+                    # Curvature makes even the final local linear forecast
+                    # differ from the real output.
+                    features = torch.full(
+                        (2, 3), float((step + 1) ** 2 + 10 * negative)
+                    )
                     real, output = self._forward(
                         model, step, features, negative=negative
                     )
-                    self.assertEqual(real, step < 7)
+                    self.assertTrue(real)
                     torch.testing.assert_close(output, features, atol=0, rtol=0)
         # Request-owned parameters must not be rewritten by the model policy.
         self.assertEqual(self.params.warmup_steps, 2)
