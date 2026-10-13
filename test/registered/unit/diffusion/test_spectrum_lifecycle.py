@@ -82,6 +82,39 @@ class TestSpectrumLifecycle(CustomTestCase):
                 # Each rank runs one forward per step, so both wrap after the run.
                 self.assertEqual(negative._get_spectrum_branch_state(), (0, 0, 4.0))
 
+    def test_flux_true_cfg_uses_only_one_late_local_prediction(self):
+        from sglang.multimodal_gen.runtime.models.dits.flux import (
+            FluxTransformer2DModel,
+        )
+
+        # The real model's cache policy does not need transformer weights.
+        model = FluxTransformer2DModel.__new__(FluxTransformer2DModel)
+        torch.nn.Module.__init__(model)
+        model.prefix = "flux"
+        model._init_spectrum_state()
+        for step in range(8):
+            for negative in (False, True):
+                with self.subTest(step=step, negative=negative):
+                    features = torch.full((2, 3), float(step + 1 + 10 * negative))
+                    real, output = self._forward(
+                        model, step, features, negative=negative
+                    )
+                    self.assertEqual(real, step < 7)
+                    torch.testing.assert_close(output, features, atol=0, rtol=0)
+        # Request-owned parameters must not be rewritten by the model policy.
+        self.assertEqual(self.params.warmup_steps, 2)
+        self.assertEqual(self.params.w, 1.0)
+        self.assertEqual(self.params.history_size, 8)
+
+        # Embedded guidance without true CFG retains the existing schedule.
+        reference = _SpectrumModel("flux")
+        for step in range(8):
+            features = torch.full((2, 3), float(step + 1))
+            actual = self._forward(model, step, features, do_cfg=False)
+            expected = self._forward(reference, step, features, do_cfg=False)
+            self.assertEqual(actual[0], expected[0])
+            torch.testing.assert_close(actual[1], expected[1], atol=0, rtol=0)
+
     def test_reused_model_matches_fresh_model_after_request_restart(self):
         """Completed and interrupted requests must not leak forecasts or debug stats."""
         for prefix, negative, do_cfg, parallel in (
