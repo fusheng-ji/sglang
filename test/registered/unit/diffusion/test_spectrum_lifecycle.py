@@ -92,19 +92,26 @@ class TestSpectrumLifecycle(CustomTestCase):
         torch.nn.Module.__init__(model)
         model.prefix = "flux"
         model._init_spectrum_state()
-        for step in range(8):
-            for negative in (False, True):
-                with self.subTest(step=step, negative=negative):
-                    # Curvature makes even the final local linear forecast
-                    # differ from the real output.
-                    features = torch.full(
-                        (2, 3), float((step + 1) ** 2 + 10 * negative)
-                    )
-                    real, output = self._forward(
-                        model, step, features, negative=negative
-                    )
-                    self.assertTrue(real)
-                    torch.testing.assert_close(output, features, atol=0, rtol=0)
+        with self.assertLogs(
+            "sglang.multimodal_gen.runtime.models.dits.flux", level="WARNING"
+        ) as logs:
+            for step in range(8):
+                for negative in (False, True):
+                    with self.subTest(step=step, negative=negative):
+                        # Curvature makes even the final local linear forecast
+                        # differ from the real output.
+                        features = torch.full(
+                            (2, 3), float((step + 1) ** 2 + 10 * negative)
+                        )
+                        real, output = self._forward(
+                            model, step, features, negative=negative
+                        )
+                        self.assertTrue(real)
+                        torch.testing.assert_close(output, features, atol=0, rtol=0)
+        self.assertEqual(len(logs.records), 1)
+        # The fallback is the uncached path: no forecaster is ever built.
+        self.assertIsNone(model.spectrum_forecaster)
+        self.assertIsNone(model.spectrum_forecaster_negative)
         # Request-owned parameters must not be rewritten by the model policy.
         self.assertEqual(self.params.warmup_steps, 2)
         self.assertEqual(self.params.w, 1.0)

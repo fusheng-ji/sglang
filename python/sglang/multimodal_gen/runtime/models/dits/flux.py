@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-from dataclasses import replace
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -1339,27 +1337,24 @@ class FluxTransformer2DModel(CachableDiT, LayerwiseOffloadableModuleMixin):
         if ctx is None or not ctx.do_cfg:
             return ctx
         # Even one final-step feature forecast can introduce border artifacts
-        # under FLUX.1 true CFG. Keep every forward real until a forecast policy
-        # passes independent image-quality validation.
-        # Copy request parameters: callers may reuse them for another model or
-        # request. A larger explicit warmup (including all-real) stays intact.
-        params = ctx.spectrum_params
-        bounded = replace(
-            params,
-            warmup_steps=max(params.warmup_steps, ctx.num_inference_steps, 2),
-            w=0.0,
-            taylor_order=1,
-            history_size=max(2, params.m + 1),
-        )
-        if ctx.current_step == 0 and not ctx.is_cfg_negative:
-            logging.getLogger(__name__).warning(
-                "FLUX.1 true CFG uses the Spectrum quality fallback: all %d "
+        # under FLUX.1 true CFG. Disable Spectrum for the request until a
+        # forecast policy passes independent image-quality validation; a None
+        # context skips all forecaster bookkeeping, matching the uncached path.
+        if ctx.current_step > 0:
+            self._spectrum_true_cfg_warned = False
+        elif not ctx.is_cfg_negative and not getattr(
+            self, "_spectrum_true_cfg_warned", False
+        ):
+            # begin and record both query the context at step 0; warn once.
+            self._spectrum_true_cfg_warned = True
+            logger.warning(
+                "FLUX.1 true CFG disables Spectrum for this request: all %d "
                 "steps use real forwards because even a final-step forecast "
-                "can introduce border artifacts. Spectrum skipping is disabled "
-                "for this request; no Spectrum speedup is expected.",
+                "can introduce border artifacts. No Spectrum speedup is "
+                "expected.",
                 ctx.num_inference_steps,
             )
-        return replace(ctx, spectrum_params=bounded)
+        return None
 
     def forward(
         self,
