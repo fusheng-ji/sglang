@@ -1338,25 +1338,25 @@ class FluxTransformer2DModel(CachableDiT, LayerwiseOffloadableModuleMixin):
         ctx = super()._get_spectrum_context()
         if ctx is None or not ctx.do_cfg:
             return ctx
-        # Aggressive long-horizon feature forecasts diverge under FLUX.1 true
-        # CFG. Keep at most one final-step, first-order local extrapolation.
+        # Even one final-step feature forecast can introduce border artifacts
+        # under FLUX.1 true CFG. Keep every forward real until a forecast policy
+        # passes independent image-quality validation.
         # Copy request parameters: callers may reuse them for another model or
         # request. A larger explicit warmup (including all-real) stays intact.
         params = ctx.spectrum_params
         bounded = replace(
             params,
-            warmup_steps=max(params.warmup_steps, ctx.num_inference_steps - 1, 2),
+            warmup_steps=max(params.warmup_steps, ctx.num_inference_steps, 2),
             w=0.0,
             taylor_order=1,
             history_size=max(2, params.m + 1),
         )
         if ctx.current_step == 0 and not ctx.is_cfg_negative:
             logging.getLogger(__name__).warning(
-                "FLUX.1 true CFG uses a conservative Spectrum fallback: real "
-                "forwards until step %d/%d, then at most one local Taylor "
-                "prediction. This is a quality safeguard, not the aggressive "
-                "Spectrum speedup profile.",
-                bounded.warmup_steps,
+                "FLUX.1 true CFG uses the Spectrum quality fallback: all %d "
+                "steps use real forwards because even a final-step forecast "
+                "can introduce border artifacts. Spectrum skipping is disabled "
+                "for this request; no Spectrum speedup is expected.",
                 ctx.num_inference_steps,
             )
         return replace(ctx, spectrum_params=bounded)
